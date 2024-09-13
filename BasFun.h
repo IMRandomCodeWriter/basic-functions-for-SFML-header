@@ -1,4 +1,6 @@
 
+//VERSION-0.23
+
 
 
 //SETTINGS
@@ -92,6 +94,11 @@ namespace bf
     {
         return v1.x * v2.x + v1.y * v2.y;
     }
+    template <typename T>
+    float det(const sf::Vector2<T>& v1, const sf::Vector2<T>& v2)
+    {
+        return v1.x * v2.x - v1.y * v2.y;
+    }
 
     template <typename T>
     float angle(const sf::Vector2<T>& v1, const sf::Vector2<T>& v2)
@@ -103,6 +110,48 @@ namespace bf
 
         return 0.0f;
     }
+
+    bool isIntersecting(sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f q1, sf::Vector2f q2, sf::Vector2f& intersection)
+    {
+        sf::Vector2f dirP = sf::Vector2f(p2.x - p1.x, p2.y - p1.y);
+        sf::Vector2f dirQ = sf::Vector2f(q2.x - q1.x, q2.y - q1.y);
+
+        float denom = dirP.x * dirQ.y - dirP.y * dirQ.x;
+        if (denom == 0) {
+            return false;
+        }
+
+        sf::Vector2f deltaQ = sf::Vector2f(q1.x - p1.x, q1.y - p1.y);
+        float t = (deltaQ.x * dirQ.y - deltaQ.y * dirQ.x) / denom;
+        float s = (deltaQ.x * dirP.y - deltaQ.y * dirP.x) / denom;
+
+        if (t >= 0 && t <= 1 && s >= 0 && s <= 1) {
+            intersection.x = p1.x + t * dirP.x;
+            intersection.y = p1.y + t * dirP.y;
+            return true;
+        }
+
+        return false;
+    }
+    bool isIntersecting(sf::Vector2f p1, sf::Vector2f p2, sf::Vector2f q1, sf::Vector2f q2) {
+        sf::Vector2f dirP = sf::Vector2f(p2.x - p1.x, p2.y - p1.y);
+        sf::Vector2f dirQ = sf::Vector2f(q2.x - q1.x, q2.y - q1.y);
+
+        float denom = dirP.x * dirQ.y - dirP.y * dirQ.x;
+        if (denom == 0) {
+            return false;
+        }
+
+        sf::Vector2f deltaQ = sf::Vector2f(q1.x - p1.x, q1.y - p1.y);
+        float t = (deltaQ.x * dirQ.y - deltaQ.y * dirQ.x) / denom;
+        float s = (deltaQ.x * dirP.y - deltaQ.y * dirP.x) / denom;
+
+        if (t >= 0 && t <= 1 && s >= 0 && s <= 1) {
+            return true;
+        }
+
+        return false;
+    }
     // VECTORS FUNCTIONS
 #endif
 
@@ -110,9 +159,10 @@ namespace bf
 
 #if SHAPES_FUNCTIONS_ACTIVE
     // SHAPES FUNCTIONS
-    sf::Vector2f realCenter(const sf::VertexArray& va)
+    template <typename T>
+    sf::Vector2<T>  realCenter(const sf::VertexArray& va)
     {
-        sf::Vector2f mp;
+        sf::Vector2<T> mp;
 
         for (int i = 0; i < va.getVertexCount(); i++)
         {
@@ -121,9 +171,10 @@ namespace bf
 
         return mp / static_cast<float>(va.getVertexCount());
     }
-    sf::Vector2f realCenter(const sf::Shape& shape)
+    template <typename T>
+    sf::Vector2<T> realCenter(const sf::Shape& shape)
     {
-        sf::Vector2f mp;
+        sf::Vector2<T> mp;
 
         for (int i = 0; i < shape.getPointCount(); i++)
         {
@@ -192,6 +243,87 @@ namespace bf
         }
         return false;
     }
+
+    bool isRayIntersectingShape(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Shape& s, sf::Vector2f& iClose, sf::Vector2f& iFar)
+    {
+        sf::Vector2f pos = s.getPosition();
+
+        iFar = p1;
+        iClose.x = INFINITY;
+        iClose.y = INFINITY;
+
+        float fDist = bf::distance(p1, iFar);
+        float cDist = bf::distance(p1, iClose);
+        bool result = false;
+
+        for (size_t i = 1; i < s.getPointCount(); i++)
+        {
+            sf::Vector2f intersection;
+            bool r = bf::isIntersecting(p1, p2, s.getPoint(i) + pos, s.getPoint(i - 1) + pos, intersection);
+            float iDist = bf::distance(p1, intersection);
+
+            if (r)
+            {
+                result = r;
+                float iDist = bf::distance(p1, intersection);
+                if (cDist > iDist) { cDist = iDist; iClose = intersection; }
+                if (fDist < iDist) { fDist = iDist; iFar = intersection; }
+            }
+        }
+
+        sf::Vector2f intersection;
+        bool r = bf::isIntersecting(p1, p2, s.getPoint(s.getPointCount()) + pos, s.getPoint(0) + pos, intersection);
+
+        if (r)
+        {
+            result = r;
+            float iDist = bf::distance(p1, intersection);
+            if (cDist > iDist) { cDist = iDist; iClose = intersection; }
+            if (fDist < iDist) { fDist = iDist; iFar = intersection; }
+        }
+
+        return r;
+    }
+    bool isRayIntersectingShape(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Shape& s, sf::Vector2f& intersection)
+    {
+        sf::Vector2f pos = s.getPosition();
+        sf::Vector2f i;
+        float dist = INFINITY;
+        bool result = false;
+
+        for (size_t k = 1; k < s.getPointCount(); k++)
+        {
+            if (bf::isIntersecting(p1, p2, s.getPoint(k) + pos, s.getPoint(k - 1) + pos, intersection))
+            {
+                float iDist = bf::distance(p1, i);
+                if (iDist < dist) { dist = iDist; intersection = i; }
+                result = true;
+            }
+        }
+
+        if (bf::isIntersecting(p1, p2, s.getPoint(s.getPointCount()) + pos, s.getPoint(0) + pos, intersection))
+        {
+            float iDist = bf::distance(p1, i);
+            if (iDist < dist) { dist = iDist; intersection = i; }
+            result = true;
+        }
+
+        return result;
+    }
+    bool isRayIntersectingShape(const sf::Vector2f& p1, const sf::Vector2f& p2, const sf::Shape& s)
+    {
+        sf::Vector2f pos = s.getPosition();
+
+        for (size_t i = 1; i < s.getPointCount(); i++)
+        {
+            if (bf::isIntersecting(p1, p2, s.getPoint(i) + pos, s.getPoint(i - 1) + pos))
+            {
+                return true;
+            }
+        }
+
+        return bf::isIntersecting(p1, p2, s.getPoint(s.getPointCount()), s.getPoint(0));
+    }
     // SHAPES FUNCTIONS
 #endif
 
@@ -230,6 +362,11 @@ namespace bf
     float dot(const sf::Vector3<T>& v1, const sf::Vector3<T>& v2)
     {
         return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+    }
+    template <typename T>
+    float det(const sf::Vector3<T>& v1, const sf::Vector3<T>& v2)
+    {
+        return v1.x * v2.x - v1.y * v2.y - v1.z * v2.z;
     }
 
     template <typename T>
